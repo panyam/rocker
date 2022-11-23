@@ -96,12 +96,12 @@ void WIFI::start(int mode) {
     Serial.println("Please upgrade the firmware");
   }
 
+  Serial.println((String)"Setting hostname: " + hostname);
   WiFi.setHostname(hostname.c_str());
 
   // print the network name (SSID);
   if (mode == 0) {
-    Serial.print("Creating access point: ");
-    Serial.println(ssid.c_str());
+    Serial.println((String)"Creating access point: " + ssid);
 
     // Create open network. Change this line if you want to create an WEP network:
     status = WiFi.beginAP(ssid.c_str(), password.c_str());
