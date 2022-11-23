@@ -3,7 +3,7 @@
 #include <EEPROM.h>
 
 int led =  LED_BUILTIN;
-#define DATA_VERSION 1
+#define DATA_VERSION 2
 #define POST_CONN_WAIT 5000
 #define VERSION_ADDRESS 0
 #define SSID_ADDRESS 1
@@ -97,10 +97,12 @@ void WIFI::start(int mode) {
   }
 
   Serial.println((String)"Setting hostname: " + hostname);
-  WiFi.setHostname(hostname.c_str());
 
   // print the network name (SSID);
   if (mode == 0) {
+    IPAddress us(10, 10, 10, 10);
+    WiFi.config(us, us, us);
+    WiFi.setHostname(hostname.c_str());
     Serial.println((String)"Creating access point: " + ssid);
 
     // Create open network. Change this line if you want to create an WEP network:
@@ -114,6 +116,7 @@ void WIFI::start(int mode) {
     // wait 10 seconds for connection:
     delay(POST_CONN_WAIT);
   } else {
+    WiFi.setHostname(hostname.c_str());
     Serial.print("Connecting to access point: ");
     Serial.println(ssid.c_str());
 
