@@ -123,13 +123,13 @@ void WIFI::start(int mode) {
     // attempt to connect to Wifi network:
     for (int numTries = 2;status != WL_CONNECTED && numTries > 0;numTries--) {
       if (mode == 1) { // WEP
-        Serial.print((String)"Attempting to connect to WEP network, SSID: " + ssid);
+        Serial.println((String)"Attempting to connect to WEP network, SSID: " + ssid);
         status = WiFi.begin(ssid.c_str(), keyIndex, password.c_str());
       } else if (mode == 2) { // WPA/WPA2
-        Serial.print((String)"Attempting to connect to WPA/WPA2 network, SSID: " + ssid);
+        Serial.println((String)"Attempting to connect to WPA/WPA2 network, SSID: " + ssid);
         status = WiFi.begin(ssid.c_str(), password.c_str());
       } else if (mode == 3) { // open unencrypted network
-        Serial.print((String)"Attempting to connect to open network, SSID: " + ssid);
+        Serial.println((String)"Attempting to connect to open network, SSID: " + ssid);
         status = WiFi.begin(ssid.c_str());
       }
       Serial.print("Conection Status: ");

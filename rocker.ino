@@ -201,13 +201,24 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
       client.print(frontPageHtml);
     } else {
       client.println("<html>");
+      client.println("  <head>");
+      client.println((String)"<title>Control - " + wifi.hostname + "</title>");
+      client.println("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+      client.println("<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css\">");
+      client.println("  </head>");
       client.println("  <body>");
-      client.println("  <center><h2>Control your rocker</h2></center>");
+      client.println("  <center><h2>Control your rocker - " + wifi.hostname + "</h2></center>");
       client.println("  <center>");
       client.println(String("Speed: ") + motor.currSpeed);
-      client.println(String("    <form action=\"/speed/") + (motor.currSpeed - 1) + String("\"> <button>-</button> </form>"));
-      client.println(String("    <form action=\"/speed/") + (motor.currSpeed + 1) + String("\"> <button>+</button> </form>"));
-      client.println("    <form action=\"/speed/0\"> <button>Turn Off</button> </form>");
+      client.println(String("    <form action=\"/speed/") + (motor.currSpeed - 1) + String("\">") + 
+                          "<button style=\"font-size:24px\">"
+                          "<i class=\"fa fa-minus\" style=\"font-size:48px;color:red\"></i></button></form>");
+      client.println(String("    <form action=\"/speed/") + (motor.currSpeed + 1) + String("\">") + 
+                          "<button style=\"font-size:24px\">"
+                          "<i class=\"fa fa-plus\" style=\"font-size:48px;color:red\"></i></button></form>");
+      client.println("    <form action=\"/speed/0\"> "
+                          "<button style=\"font-size:24px\">"
+                          "<i class=\"fa fa-power-off\" style=\"font-size:48px;color:red\"></i></button></form>");
       client.println("  </center>");
       client.println("  </body>");
       client.println("</html>");
