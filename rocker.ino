@@ -9,13 +9,21 @@ typedef struct Request {
   String path;
 } Request;
 
-Request theRequest;
-bool inWAPMode = false;
-Button yellowButton("Yellow", 11);
-Button whiteButton("White", 12);
+void whiteButtonHandler(Button *b, int event, unsigned long currTime);
+void blueButtonHandler(Button *b, int event, unsigned long currTime);
+void yellowButtonHandler(Button *b, int event, unsigned long currTime);
+
+#define NUM_BUTTONS 3
+Button buttons[NUM_BUTTONS] = {
+  Button("Blue (Down)", 10, blueButtonHandler),
+  Button("Yellow (Up)", 11, yellowButtonHandler),
+  Button("White (Power)", 12, whiteButtonHandler),
+};
 Motor motor(5, 6);
 WIFI wifi("rockerssid", "password", "rocker1");
 WebServer webserver(80);
+Request currRequest;
+bool inWAPMode = false;
 
 void whiteButtonHandler(Button *b, int event, unsigned long currTime) {
   static unsigned long lastTime = 0;
@@ -35,6 +43,20 @@ void whiteButtonHandler(Button *b, int event, unsigned long currTime) {
   }
 }
 
+void blueButtonHandler(Button *b, int event, unsigned long currTime) {
+  if (event == BUTTON_UP) {
+    // Go into WAP mode if white button was pressed for 5 seconds
+    motor.decreaseSpeed();
+  }
+}
+
+void yellowButtonHandler(Button *b, int event, unsigned long currTime) {
+  if (event == BUTTON_UP) {
+    // Go into WAP mode if white button was pressed for 5 seconds
+    motor.increaseSpeed();
+  }
+}
+
 void setup()
 {
 #ifdef DEBUG 
@@ -44,9 +66,9 @@ void setup()
 #endif
   DPRINTLN("Here.....");
   motor.setup();
-  whiteButton.setup();
-  yellowButton.setup();
-  whiteButton.eventHandler = whiteButtonHandler;
+  for (int i = 0;i < NUM_BUTTONS;i++) {
+    buttons[i].setup();
+  }
   webserver.onRequest = onRequest;
   webserver.onBodyStarted = onBodyStarted;
 
@@ -62,14 +84,24 @@ void loop() {
   }
   webserver.handleClient();
   // now handle buttons
-  whiteButton.next();
-  yellowButton.next();
+  for (int i = 0;i < NUM_BUTTONS;i++) {
+    buttons[i].next();
+  }
+}
+
+void startResponse(
+  WiFiClient &client, int statusCode,
+  const char *statusMessage, const char *contentType
+) {
+    client.print("HTTP/1.1 "); client.print(statusCode); client.println(statusMessage);
+    client.print("Content-type: "); client.println(contentType);
+    client.println();
 }
 
 void* onRequest(String method, String path, String version) {
-  theRequest.method = method;
-  theRequest.path = path;
-  return &theRequest;
+  currRequest.method = method;
+  currRequest.path = path;
+  return &currRequest;
 }
 
 void onBodyStarted(WiFiClient &client, void *reqctx) {
@@ -82,14 +114,10 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
         // Check to see if the client request was "GET /H" or "GET /L":
   int led = LED_BUILTIN;
   if (req->path == "/H") {
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-type:text/html");
-    client.println();
+    startResponse(client, 200, "OK", "text/html");
     digitalWrite(led, HIGH);               // GET /H turns the LED on
   } else if (req->path == "/L") {
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-type:text/html");
-    client.println();
+    startResponse(client, 200, "OK", "text/html");
     digitalWrite(led, LOW);                // GET /L turns the LED off
   } else if (req->path.startsWith("/setupwifi?")) {
     String path = req->path.substring(11);  // strip the "/setupwifi?"
@@ -114,9 +142,7 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
     }
     int mode = 2;
     if (ssid == "") {
-      client.println("HTTP/1.1 400 InvalidSSID");
-      client.println("Content-type:text/html");
-      client.println();
+      startResponse(client, 400, "InvalidSSID", "text/html");
     } else {
       client.print("Restarting with new credentials...");
       wifi.configure(ssid, password, hostname);
@@ -126,9 +152,7 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
     }
   } else {
     // the content of the HTTP response follows the header:
-    client.println("HTTP/1.1 200 OK");
-    client.println("Content-type:text/html");
-    client.println();
+    startResponse(client, 200, "OK", "text/html");
     client.print("Click <a href=\"/H\">here</a> turn the LED on<br>");
     client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
 

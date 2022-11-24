@@ -30,7 +30,8 @@ typedef void (*ButtonHandler)(Button *b, int event, unsigned long currTime);
 
 class Button {
 public:
-  Button(String name, int pin, unsigned int dbDelay = 50);
+  Button(String n, int p, ButtonHandler handler);
+  Button(String name, int pin, unsigned int dbDelay = 50, ButtonHandler eventHandler = NULL);
   // Reads the value of the pin.
   void setup();
   void reset();

@@ -15,8 +15,6 @@ void Motor::setup() {
 }
 
 void Motor::setSpeed(int speed) {
-  DPRINTLN((String)"Setting speed to: " + speed + ", " + rpwmOutputPin + ", " +  lpwmOutputPin);
-
   if (speed > numSpeeds) {
     speed = 0;
   } else if (speed < 0) {
@@ -24,6 +22,7 @@ void Motor::setSpeed(int speed) {
     // for now dont go below 0
     speed = 0;
   }
+  DPRINTLN((String)"Setting speed to: " + speed + ", " + rpwmOutputPin + ", " +  lpwmOutputPin);
 
   currSpeed = speed;
   analogWrite(rpwmOutputPin, 0);

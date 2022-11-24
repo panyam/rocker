@@ -1,4 +1,3 @@
-
 #include "Button.h"
 #define DEBUG
 #include "common.h"
@@ -13,7 +12,13 @@ void defaultButtonHandler(Button *b, int event, unsigned long currTime) {
   }
 }
 
-Button::Button(String n, int p, unsigned int dbDelay): name(n), _pin(p), lastState(LOW), currState(LOW), lastDebouncedAt(0), debounceDelay(dbDelay), _downAt(0), eventHandler(defaultButtonHandler) {
+Button::Button(String n, int p, ButtonHandler handler): Button(n, p, 50, handler) {
+}
+
+Button::Button(String n, int p, unsigned int dbDelay, ButtonHandler handler): name(n), _pin(p), lastState(LOW), currState(LOW), lastDebouncedAt(0), debounceDelay(dbDelay), _downAt(0), eventHandler(handler) {
+  if (eventHandler == NULL) {
+    eventHandler = defaultButtonHandler;
+  }
 }
 
 void Button::setup() {
@@ -51,7 +56,7 @@ void Button::next() {
       eventHandler(this, BUTTON_HELD, currTime);
     } else if (_downAt > 0) {
       // check if this was "just" released?
-      DPRINTLN((String)"Reading: " + reading + ", DownAt: " + _downAt);
+      // DPRINTLN((String)"Reading: " + reading + ", DownAt: " + _downAt);
     } else {
       // we are non-pressed and non-released so do nothing
     }
