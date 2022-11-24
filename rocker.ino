@@ -83,14 +83,8 @@ void setup()
 }
 
 void loop() {
-  unsigned long currTime = millis();
   if (inWAPMode) {
     wifi.handleAPClient();
-
-    // blink
-    digitalWrite(LED_BUILTIN, currTime % 1000 < 500 ? HIGH : LOW);
-  } else {
-    digitalWrite(LED_BUILTIN, HIGH);
   }
   webserver.handleClient();
   // now handle buttons
@@ -109,6 +103,13 @@ void startResponse(
   if (noHeaders) {
     client.println();
   }
+}
+
+void redirectTo(WiFiClient &client, String to) {
+  startResponse(client, 302, "Moved", "", false);
+  client.print("Location: ");
+  client.println(to);
+  client.println();
 }
 
 void* onRequest(String method, String path, String version) {
@@ -152,17 +153,15 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
         // Check to see if the client request was "GET /H" or "GET /L":
   int led = LED_BUILTIN;
   if (req->path == "/H") {
-    startResponse(client, 200, "OK", "text/html");
     digitalWrite(led, HIGH);               // GET /H turns the LED on
+    redirectTo(client, "/");
   } else if (req->path == "/L") {
-    startResponse(client, 200, "OK", "text/html");
     digitalWrite(led, LOW);                // GET /L turns the LED off
+    redirectTo(client, "/");
   } else if (req->path.startsWith("/speed/")) {
     int speed = req->path.substring(strlen("/speed/")).toInt();
     motor.setSpeed(speed);
-    startResponse(client, 302, "Moved", "", false);
-    client.println("Location: /");
-    client.println();
+    redirectTo(client, "/");
   } else if (req->path.startsWith("/setupwifi?")) {
     String path = req->path.substring(11);  // strip the "/setupwifi?"
     String ssid = "";
