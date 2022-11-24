@@ -20,7 +20,7 @@ Button buttons[NUM_BUTTONS] = {
   Button("White (Power)", 12, whiteButtonHandler),
 };
 Motor motor(5, 6);
-WIFI wifi("rockerssid", "password", "rocker1");
+WIFI wifi("rocker_wifi", "password", "rocker1");
 WebServer webserver(80);
 Request currRequest;
 bool inWAPMode = false;
@@ -33,9 +33,12 @@ void whiteButtonHandler(Button *b, int event, unsigned long currTime) {
       DPRINTLN((String)"Voila Kicking off WAP mode");
       inWAPMode = true;
       wifi.stop();
-      wifi.configure("rockerssid", "password", "rocker1");
+      wifi.configure("rocker_wifi", "password", "rocker1");
       wifi.start(0);
       webserver.stop();
+    } else {
+      // turn off the rocker for now
+      motor.setSpeed(0);
     }
   } else if (currTime - lastTime >= 1000) {
     lastTime = currTime;
@@ -72,6 +75,7 @@ void setup()
   webserver.onRequest = onRequest;
   webserver.onBodyStarted = onBodyStarted;
 
+  // if we have a wifi setup then go ahead and use it
   if (wifi.loadFromEEPROM()) {
     wifi.start(2);
   }
@@ -79,8 +83,14 @@ void setup()
 }
 
 void loop() {
+  unsigned long currTime = millis();
   if (inWAPMode) {
     wifi.handleAPClient();
+
+    // blink
+    digitalWrite(LED_BUILTIN, currTime % 1000 < 500 ? HIGH : LOW);
+  } else {
+    digitalWrite(LED_BUILTIN, HIGH);
   }
   webserver.handleClient();
   // now handle buttons
@@ -91,11 +101,14 @@ void loop() {
 
 void startResponse(
   WiFiClient &client, int statusCode,
-  const char *statusMessage, const char *contentType
+  const char *statusMessage, const char *contentType,
+  bool noHeaders = true
 ) {
-    client.print("HTTP/1.1 "); client.print(statusCode); client.println(statusMessage);
-    client.print("Content-type: "); client.println(contentType);
+  client.print("HTTP/1.1 "); client.print(statusCode); client.println(statusMessage);
+  client.print("Content-type: "); client.println(contentType);
+  if (noHeaders) {
     client.println();
+  }
 }
 
 void* onRequest(String method, String path, String version) {
@@ -103,6 +116,31 @@ void* onRequest(String method, String path, String version) {
   currRequest.path = path;
   return &currRequest;
 }
+
+String frontPageHtml = " \
+  <html> \
+    <head> \
+    </head> \
+    <body> \
+      <center><h2>Configure Rocker's WIFI</h2></center> \
+      <form action=\"/setupwifi\"> \
+        <label for=\"ssid\">SSID:</label> \
+        <br/> \
+        <input id=\"ssid\" value = \"SITATHEGREAT\" name=\"ssid\" placeholder=\"Enter Your network SSID\"/> \
+        <br/> \
+        <label for=\"password\">Password:</label> \
+        <br/> \
+        <input id=\"password\" value = \"GAYATHRIGOWRI\" name=\"password\" placeholder=\"Enter Your network Password\"/> \
+        <br/> \
+        <label for=\"hostname\">SSID:</label> \
+        <br/> \
+        <input id=\"hostname\" value=\"rocker1\" name=\"hostname\" placeholder=\"Name your rocker\"/> \
+        <br/> \
+        <center><button>Submit</button></center> \
+      </form> \
+    </body> \
+  </html> \
+";
 
 void onBodyStarted(WiFiClient &client, void *reqctx) {
   Request *req = (Request *)reqctx;
@@ -119,6 +157,12 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
   } else if (req->path == "/L") {
     startResponse(client, 200, "OK", "text/html");
     digitalWrite(led, LOW);                // GET /L turns the LED off
+  } else if (req->path.startsWith("/speed/")) {
+    int speed = req->path.substring(strlen("/speed/")).toInt();
+    motor.setSpeed(speed);
+    startResponse(client, 302, "Moved", "", false);
+    client.println("Location: /");
+    client.println();
   } else if (req->path.startsWith("/setupwifi?")) {
     String path = req->path.substring(11);  // strip the "/setupwifi?"
     String ssid = "";
@@ -153,14 +197,21 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
   } else {
     // the content of the HTTP response follows the header:
     startResponse(client, 200, "OK", "text/html");
-    client.print("Click <a href=\"/H\">here</a> turn the LED on<br>");
-    client.print("Click <a href=\"/L\">here</a> turn the LED off<br>");
-
-    int randomReading = analogRead(A1);
-    client.print("Random reading from analog pin: ");
-    client.print(randomReading);
-    client.print("<br>Method: "); client.print(req->method); client.print("</br>");
-    client.print("<br>Path: "); client.print(req->path); client.print("</br>");
+    if (inWAPMode) {
+      client.print(frontPageHtml);
+    } else {
+      client.println("<html>");
+      client.println("  <body>");
+      client.println("  <center><h2>Control your rocker</h2></center>");
+      client.println("  <center>");
+      client.println(String("Speed: ") + motor.currSpeed);
+      client.println(String("    <form action=\"/speed/") + (motor.currSpeed - 1) + String("\"> <button>-</button> </form>"));
+      client.println(String("    <form action=\"/speed/") + (motor.currSpeed + 1) + String("\"> <button>+</button> </form>"));
+      client.println("    <form action=\"/speed/0\"> <button>Turn Off</button> </form>");
+      client.println("  </center>");
+      client.println("  </body>");
+      client.println("</html>");
+    }
   }
   // The HTTP response ends with another blank line:
   client.println();

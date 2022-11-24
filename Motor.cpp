@@ -39,7 +39,7 @@ void Motor::setSpeed(int speed) {
 }
 
 void Motor::decreaseSpeed() {
-  setSpeed(currSpeed - 1);
+  setSpeed(currSpeed - 1);  
 }
 
 void Motor::increaseSpeed() {
