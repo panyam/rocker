@@ -5,6 +5,7 @@ WebServer::WebServer(int port) : server(port) {
 }
 
 void WebServer::next() {
+  // dont look for clients too often - 
   WiFiClient client = server.available();   // listen for incoming clients
   if (!client) {                             // if you get a client,
     return;

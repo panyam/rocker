@@ -10,14 +10,17 @@ typedef struct Request {
   String path;
 } Request;
 
-enum ButtonStates {
-  BUTTON_IDLE,
-  BUTTON_PRESSED,
-  UP_REQUESTED,
-  DOWN_REQUESTED,
-  WIFI_RESET_REQUESTED,
-  WAP_REQUESTED,
-  REBOOT_REQUESTED,
+class ButtonStates {
+public:
+  enum {
+    BUTTON_IDLE,
+    BUTTON_PRESSED,
+    UP_REQUESTED,
+    DOWN_REQUESTED,
+    WIFI_RESET_REQUESTED,
+    WAP_REQUESTED,
+    REBOOT_REQUESTED,
+  };
 };
 
 // Calling a null function is a way of resetting the board.  Hmm
@@ -36,7 +39,7 @@ Motor motor(5, 6);
 WIFI wifi("rocker_wifi", "password", "rocker1");
 WebServer webserver(80);
 Request currRequest;
-int buttonState = BUTTON_IDLE;
+int buttonState = ButtonStates::BUTTON_IDLE;
 
 void restartArduino() {
   Serial.println("Restarting arduino...");
@@ -59,17 +62,17 @@ void whiteButtonHandler(Button *b, int event, unsigned long currTime) {
   if (event == Button::BUTTON_UP) {
     // Go into WAP mode if white button was pressed for 5 seconds
     if (currTime - b->downAt() >= 10000) {
-      buttonState = REBOOT_REQUESTED;
+      buttonState = ButtonStates::REBOOT_REQUESTED;
     } else if (currTime - b->downAt() >= 5000) {
-      buttonState = WAP_REQUESTED;
+      buttonState = ButtonStates::WAP_REQUESTED;
     } else if (currTime - b->downAt() >= 2000) {
-      buttonState = WIFI_RESET_REQUESTED;
+      buttonState = ButtonStates::WIFI_RESET_REQUESTED;
     } else {
       // turn off the rocker for now
       motor.setSpeed(0);
     }
   } else if (currTime - lastTime >= 1000) {
-    buttonState = BUTTON_PRESSED;
+    buttonState = ButtonStates::BUTTON_PRESSED;
     lastTime = currTime;
     DPRINTLN((String)"White Button: " + event + ", Time: " + currTime);
   }
@@ -77,13 +80,13 @@ void whiteButtonHandler(Button *b, int event, unsigned long currTime) {
 
 void blueButtonHandler(Button *b, int event, unsigned long currTime) {
   if (event == Button::BUTTON_UP) {
-    buttonState = DOWN_REQUESTED;
+    buttonState = ButtonStates::DOWN_REQUESTED;
   }
 }
 
 void yellowButtonHandler(Button *b, int event, unsigned long currTime) {
   if (event == Button::BUTTON_UP) {
-    buttonState = UP_REQUESTED;
+    buttonState = ButtonStates::UP_REQUESTED;
   }
 }
 
@@ -205,7 +208,6 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
       if (ampPos < 0) break;
       path = path.substring(ampPos + 1);
     }
-    int mode = 2;
     if (ssid == "") {
       startResponse(client, 400, "InvalidSSID", "text/html");
     } else {
@@ -214,7 +216,7 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
       wifi.saveToEEPROM();
       restartWifi();
     }
-  } else {
+  } else if (req->path == "/") {
     // the content of the HTTP response follows the header:
     startResponse(client, 200, "OK", "text/html");
     if (wifi.inWAPMode()) {
@@ -227,7 +229,7 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
       client.println("<link rel=\"stylesheet\" href=\"https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css\">");
       client.println("  </head>");
       client.println("  <body>");
-      client.println("  <center><h2>Control your rocker - " + wifi.hostname + "</h2></center>");
+      client.println("  <center><h2>Control your rocker - " + wifi.hostname + "(T: " + millis() + ")</h2></center>");
       client.println("  <center>");
       client.println(String("Speed: ") + motor.currSpeed);
       client.println(String("    <form action=\"/speed/") + (motor.currSpeed - 1) + String("\">") + 
@@ -246,31 +248,33 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
       client.println("  </body>");
       client.println("</html>");
     }
+  } else {
+    startResponse(client, 404, "NotFound", "text/html");
   }
   // The HTTP response ends with another blank line:
   client.println();
 }
 
 void loop() {
-  if (buttonState == WAP_REQUESTED) {
+  if (buttonState == ButtonStates::WAP_REQUESTED) {
     gotoWAPMode();
-    buttonState = BUTTON_IDLE;
-  } else if (buttonState == WIFI_RESET_REQUESTED) {
+    buttonState = ButtonStates::BUTTON_IDLE;
+  } else if (buttonState == ButtonStates::WIFI_RESET_REQUESTED) {
     // restart wifi
     restartWifi();
-    buttonState = BUTTON_IDLE;
-  } else if (buttonState == REBOOT_REQUESTED) {
+    buttonState = ButtonStates::BUTTON_IDLE;
+  } else if (buttonState == ButtonStates::REBOOT_REQUESTED) {
     restartArduino();
-    buttonState = BUTTON_IDLE;
-  } else if (buttonState == UP_REQUESTED) {
+    buttonState = ButtonStates::BUTTON_IDLE;
+  } else if (buttonState == ButtonStates::UP_REQUESTED) {
     motor.increaseSpeed();
-    buttonState = BUTTON_IDLE;
-  } else if (buttonState == DOWN_REQUESTED) {
+    buttonState = ButtonStates::BUTTON_IDLE;
+  } else if (buttonState == ButtonStates::DOWN_REQUESTED) {
     motor.decreaseSpeed();
-    buttonState = BUTTON_IDLE;
+    buttonState = ButtonStates::BUTTON_IDLE;
   } else {  // Buttons are IDLE or pressed - handle wifi/web
     // now handle buttons
-    if (buttonState != BUTTON_PRESSED) {
+    if (buttonState != ButtonStates::BUTTON_PRESSED) {
       wifi.next();
       webserver.next();
     }
