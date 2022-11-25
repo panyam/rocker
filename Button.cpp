@@ -5,7 +5,7 @@
 void defaultButtonHandler(Button *b, int event, unsigned long currTime) {
   static unsigned long lastTime = 0;
   static Button *lastButton = NULL;
-  if (currTime > lastTime + 1000 || event == BUTTON_UP || b != lastButton) {
+  if (currTime > lastTime + 1000 || event == Button::BUTTON_UP || b != lastButton) {
     lastTime = currTime;
     lastButton = b;
     DPRINTLN((String)"Button: (" + b->name + "), " + event + ", Time: " + currTime + ", DownAt: " + b->downAt());

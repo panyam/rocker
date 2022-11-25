@@ -3,12 +3,25 @@
 #include "Button.h"
 #include "Motor.h"
 #include "Wifi.h"
+#include "Web.h"
 
 typedef struct Request {
   String method;
   String path;
 } Request;
 
+enum ButtonStates {
+  BUTTON_IDLE,
+  BUTTON_PRESSED,
+  UP_REQUESTED,
+  DOWN_REQUESTED,
+  WIFI_RESET_REQUESTED,
+  WAP_REQUESTED,
+  REBOOT_REQUESTED,
+};
+
+// Calling a null function is a way of resetting the board.  Hmm
+void (*resetFunc) (void) = 0;//declare reset function at address 0
 void whiteButtonHandler(Button *b, int event, unsigned long currTime);
 void blueButtonHandler(Button *b, int event, unsigned long currTime);
 void yellowButtonHandler(Button *b, int event, unsigned long currTime);
@@ -23,40 +36,54 @@ Motor motor(5, 6);
 WIFI wifi("rocker_wifi", "password", "rocker1");
 WebServer webserver(80);
 Request currRequest;
-bool inWAPMode = false;
+int buttonState = BUTTON_IDLE;
+
+void restartArduino() {
+  Serial.println("Restarting arduino...");
+  delay(10);
+  resetFunc();
+}
+
+void restartWifi() {
+  wifi.start(2);
+}
+
+void gotoWAPMode() {
+  DPRINTLN((String)"Voila Kicking off WAP mode");
+  wifi.configure("rocker_wifi", "password", "rocker1");
+  wifi.start(0);
+}
 
 void whiteButtonHandler(Button *b, int event, unsigned long currTime) {
   static unsigned long lastTime = 0;
-  if (event == BUTTON_UP) {
+  if (event == Button::BUTTON_UP) {
     // Go into WAP mode if white button was pressed for 5 seconds
-    if (currTime - b->downAt() >= 5000) {
-      DPRINTLN((String)"Voila Kicking off WAP mode");
-      inWAPMode = true;
-      wifi.stop();
-      wifi.configure("rocker_wifi", "password", "rocker1");
-      wifi.start(0);
-      webserver.stop();
+    if (currTime - b->downAt() >= 10000) {
+      buttonState = REBOOT_REQUESTED;
+    } else if (currTime - b->downAt() >= 5000) {
+      buttonState = WAP_REQUESTED;
+    } else if (currTime - b->downAt() >= 2000) {
+      buttonState = WIFI_RESET_REQUESTED;
     } else {
       // turn off the rocker for now
       motor.setSpeed(0);
     }
   } else if (currTime - lastTime >= 1000) {
+    buttonState = BUTTON_PRESSED;
     lastTime = currTime;
     DPRINTLN((String)"White Button: " + event + ", Time: " + currTime);
   }
 }
 
 void blueButtonHandler(Button *b, int event, unsigned long currTime) {
-  if (event == BUTTON_UP) {
-    // Go into WAP mode if white button was pressed for 5 seconds
-    motor.decreaseSpeed();
+  if (event == Button::BUTTON_UP) {
+    buttonState = DOWN_REQUESTED;
   }
 }
 
 void yellowButtonHandler(Button *b, int event, unsigned long currTime) {
-  if (event == BUTTON_UP) {
-    // Go into WAP mode if white button was pressed for 5 seconds
-    motor.increaseSpeed();
+  if (event == Button::BUTTON_UP) {
+    buttonState = UP_REQUESTED;
   }
 }
 
@@ -72,25 +99,15 @@ void setup()
   for (int i = 0;i < NUM_BUTTONS;i++) {
     buttons[i].setup();
   }
+  wifi.setup();
   webserver.onRequest = onRequest;
   webserver.onBodyStarted = onBodyStarted;
 
   // if we have a wifi setup then go ahead and use it
   if (wifi.loadFromEEPROM()) {
-    wifi.start(2);
+    restartWifi();
   }
   webserver.start();
-}
-
-void loop() {
-  if (inWAPMode) {
-    wifi.handleAPClient();
-  }
-  webserver.handleClient();
-  // now handle buttons
-  for (int i = 0;i < NUM_BUTTONS;i++) {
-    buttons[i].next();
-  }
 }
 
 void startResponse(
@@ -133,7 +150,7 @@ String frontPageHtml = " \
         <br/> \
         <input id=\"password\" value = \"GAYATHRIGOWRI\" name=\"password\" placeholder=\"Enter Your network Password\"/> \
         <br/> \
-        <label for=\"hostname\">SSID:</label> \
+        <label for=\"hostname\">Rocker Name:</label> \
         <br/> \
         <input id=\"hostname\" value=\"rocker1\" name=\"hostname\" placeholder=\"Name your rocker\"/> \
         <br/> \
@@ -151,12 +168,18 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
   // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
   // and a content-type so the client knows what's coming, then a blank line:
         // Check to see if the client request was "GET /H" or "GET /L":
-  int led = LED_BUILTIN;
   if (req->path == "/H") {
-    digitalWrite(led, HIGH);               // GET /H turns the LED on
+    digitalWrite(LED_BUILTIN, HIGH);               // GET /H turns the LED on
     redirectTo(client, "/");
   } else if (req->path == "/L") {
-    digitalWrite(led, LOW);                // GET /L turns the LED off
+    digitalWrite(LED_BUILTIN, LOW);                // GET /L turns the LED off
+    redirectTo(client, "/");
+  } else if (req->path.startsWith("/restart")) {
+    if (req->path.endsWith("/wifi")) {
+      restartWifi();
+    } else {
+      restartArduino();
+    }
     redirectTo(client, "/");
   } else if (req->path.startsWith("/speed/")) {
     int speed = req->path.substring(strlen("/speed/")).toInt();
@@ -190,13 +213,12 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
       client.print("Restarting with new credentials...");
       wifi.configure(ssid, password, hostname);
       wifi.saveToEEPROM();
-      wifi.stop();
-      wifi.start(2);
+      restartWifi();
     }
   } else {
     // the content of the HTTP response follows the header:
     startResponse(client, 200, "OK", "text/html");
-    if (inWAPMode) {
+    if (wifi.inWAPMode()) {
       client.print(frontPageHtml);
     } else {
       client.println("<html>");
@@ -218,6 +240,9 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
       client.println("    <form action=\"/speed/0\"> "
                           "<button style=\"font-size:24px\">"
                           "<i class=\"fa fa-power-off\" style=\"font-size:48px;color:red\"></i></button></form>");
+      client.println("    <form action=\"/speed/0\"> "
+                          "<button style=\"font-size:24px\">"
+                          "<i class=\"fa fa-refresh\" style=\"font-size:48px;color:red\"></i></button></form>");
       client.println("  </center>");
       client.println("  </body>");
       client.println("</html>");
@@ -225,4 +250,33 @@ void onBodyStarted(WiFiClient &client, void *reqctx) {
   }
   // The HTTP response ends with another blank line:
   client.println();
+}
+
+void loop() {
+  if (buttonState == WAP_REQUESTED) {
+    gotoWAPMode();
+    buttonState = BUTTON_IDLE;
+  } else if (buttonState == WIFI_RESET_REQUESTED) {
+    // restart wifi
+    restartWifi();
+    buttonState = BUTTON_IDLE;
+  } else if (buttonState == REBOOT_REQUESTED) {
+    restartArduino();
+    buttonState = BUTTON_IDLE;
+  } else if (buttonState == UP_REQUESTED) {
+    motor.increaseSpeed();
+    buttonState = BUTTON_IDLE;
+  } else if (buttonState == DOWN_REQUESTED) {
+    motor.decreaseSpeed();
+    buttonState = BUTTON_IDLE;
+  } else {  // Buttons are IDLE or pressed - handle wifi/web
+    // now handle buttons
+    if (buttonState != BUTTON_PRESSED) {
+      wifi.next();
+      webserver.next();
+    }
+    for (int i = 0;i < NUM_BUTTONS;i++) {
+      buttons[i].next();
+    }
+  }
 }

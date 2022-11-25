@@ -1,8 +1,7 @@
 
 #include "Wifi.h"
-#include <EEPROM.h>
+#include "eepromutils.h"
 
-int led =  LED_BUILTIN;
 #define DATA_VERSION 2
 #define POST_CONN_WAIT 5000
 #define VERSION_ADDRESS 0
@@ -11,64 +10,23 @@ int led =  LED_BUILTIN;
 #define HOSTNAME_ADDRESS 65
 #define KEYINDEX_ADDRESS 97
 
-void writeStringToEEPROM(int addrOffset, const String &strToWrite)
-{
-  byte len = strToWrite.length();
-  EEPROM.write(addrOffset, len);
-  for (int i = 0; i < len; i++)
-  {
-    EEPROM.write(addrOffset + 1 + i, strToWrite[i]);
-  }
-}
-
-String readStringFromEEPROM(int addrOffset)
-{
-  int newStrLen = EEPROM.read(addrOffset);
-  char data[newStrLen + 1];
-  for (int i = 0; i < newStrLen; i++)
-  {
-    data[i] = EEPROM.read(addrOffset + 1 + i);
-  }
-  data[newStrLen] = '\0';
-  return String(data);
-}
-
 WIFI::WIFI(char *s, char *pwd, char *hn, int ki) : ssid(s), password(pwd), hostname(hn), keyIndex(ki) {
   status = WL_IDLE_STATUS;
+  state = WIFI_IDLE;
 }
 
-bool WIFI::loadFromEEPROM() {
-  if (EEPROM.read(VERSION_ADDRESS) != DATA_VERSION) {
-    return false;
+void WIFI::setup() {
+  // check for the WiFi module:
+  if (WiFi.status() == WL_NO_MODULE) {
+    Serial.println("Communication with WiFi module failed!");
+    // don't continue
+    while (true);
   }
 
-  String _ssid = readStringFromEEPROM(SSID_ADDRESS);
-  if (_ssid == "") {
-    Serial.println("WIFI is not yet configured.");
-    return false;
+  String fv = WiFi.firmwareVersion();
+  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
+    Serial.println("Please upgrade the firmware");
   }
-  ssid = _ssid;
-
-  password = readStringFromEEPROM(PASSWD_ADDRESS);
-  hostname = readStringFromEEPROM(HOSTNAME_ADDRESS);
-  EEPROM.get(KEYINDEX_ADDRESS, keyIndex);
-  Serial.println((String)"SSID: " +  ssid);
-  Serial.println((String)"Password: " +  password);
-  Serial.println((String)"Hostname: " +  hostname);
-  Serial.println((String)"KeyIndex: " +  keyIndex);
-  return true;
-}
-
-void WIFI::saveToEEPROM() {
-  Serial.println((String)"Saving SSID: " +  ssid);
-  Serial.println((String)"Saving Password: " +  password);
-  Serial.println((String)"Saving Hostname: " +  hostname);
-  Serial.println((String)"Saving KeyIndex: " +  keyIndex);
-  EEPROM.write(VERSION_ADDRESS, DATA_VERSION);
-  writeStringToEEPROM(SSID_ADDRESS, ssid);
-  writeStringToEEPROM(PASSWD_ADDRESS, password);
-  writeStringToEEPROM(HOSTNAME_ADDRESS, hostname);
-  EEPROM.write(KEYINDEX_ADDRESS, keyIndex);
 }
 
 void WIFI::configure(String s, String passwd, String hname, int ki) {
@@ -81,79 +39,29 @@ void WIFI::configure(String s, String passwd, String hname, int ki) {
 /**
  * Starts wifi in either WAP or client mode.
  */
-void WIFI::start(int mode) {
-  Serial.println("Starting Access Point...");
-  pinMode(led, OUTPUT);      // set the LED pin mode
-  // check for the WiFi module:
-  if (WiFi.status() == WL_NO_MODULE) {
-    Serial.println("Communication with WiFi module failed!");
-    // don't continue
-    while (true);
+bool WIFI::start(int mode, int numRetries) {
+  wifiMode = mode;
+  numTries = numRetries;
+  currTry = 0;
+  stop();
+  if (mode == 0) {
+    state = STARTING_WAP;
+  } else {
+    state = CONNECTING_TO_WIFI;
   }
-
-  String fv = WiFi.firmwareVersion();
-  if (fv < WIFI_FIRMWARE_LATEST_VERSION) {
-    Serial.println("Please upgrade the firmware");
-  }
-
-  Serial.println((String)"Setting hostname: " + hostname);
 
   // print the network name (SSID);
-  if (mode == 0) {
-    IPAddress us(10, 10, 10, 10);
-    WiFi.config(us, us, us);
-    WiFi.setHostname(hostname.c_str());
-    Serial.println((String)"Creating access point: " + ssid);
-
-    // Create open network. Change this line if you want to create an WEP network:
-    status = WiFi.beginAP(ssid.c_str(), password.c_str());
-    if (status != WL_AP_LISTENING) {
-      Serial.println("Creating access point failed");
-      // don't continue
-      while (true);
-    }
-
-    // wait 10 seconds for connection:
-    delay(POST_CONN_WAIT);
-  } else {
-    WiFi.setHostname(hostname.c_str());
-    Serial.print("Connecting to access point: ");
-    Serial.println(ssid.c_str());
-
-    // attempt to connect to Wifi network:
-    for (int numTries = 2;status != WL_CONNECTED && numTries > 0;numTries--) {
-      if (mode == 1) { // WEP
-        Serial.println((String)"Attempting to connect to WEP network, SSID: " + ssid);
-        status = WiFi.begin(ssid.c_str(), keyIndex, password.c_str());
-      } else if (mode == 2) { // WPA/WPA2
-        Serial.println((String)"Attempting to connect to WPA/WPA2 network, SSID: " + ssid);
-        status = WiFi.begin(ssid.c_str(), password.c_str());
-      } else if (mode == 3) { // open unencrypted network
-        Serial.println((String)"Attempting to connect to open network, SSID: " + ssid);
-        status = WiFi.begin(ssid.c_str());
-      }
-      Serial.print("Conection Status: ");
-      Serial.println(status);
-      // wait 10 seconds for connection:
-      delay(2 * POST_CONN_WAIT);
-    }
-
-    if (status == WL_CONNECTED) {
-      Serial.println("You're connected to the network");
-    } else {
-      Serial.print("Connection failed.  Status: ");
-      Serial.println(status);
-    }
-    printCurrentNet();
+  if (mode != 0) {
   }
 
   // you're connected now, so print out the status
   printWiFiStatus();
+  return status == WL_CONNECTED;
 }
 
 void WIFI::stop() {
   status = WiFi.disconnect();
-  Serial.print("WAP Status: "); Serial.println(status);
+  Serial.println(String("WAP Status: ") + status);
 }
 
 
@@ -174,52 +82,73 @@ bool WIFI::handleAPClient() {
   return status == WL_AP_CONNECTED;
 }
 
-WebServer::WebServer(int port) : server(port) {
+bool WIFI::tryStartingWAP() {
+  Serial.println("Starting Access Point...");
+  IPAddress us(10, 10, 10, 10);
+  WiFi.config(us, us, us);
+  WiFi.setHostname(hostname.c_str());
+  Serial.println((String)"Creating access point: " + ssid);
+
+  // Create open network. Change this line if you want to create an WEP network:
+  status = WiFi.beginAP(ssid.c_str(), password.c_str());
+  if (status != WL_AP_LISTENING) {
+    Serial.println("Creating access point failed");
+    return false;
+    // don't continue
+    // while (true);
+  }
+  return true;
 }
 
-void WebServer::handleClient() {
-  WiFiClient client = server.available();   // listen for incoming clients
-  if (!client) {                             // if you get a client,
-    return;
+bool WIFI::tryConnectingToWifi() {
+  // attempt to connect to Wifi network:
+  Serial.println((String)"Connecting to Wifi via Mode (" + wifiMode + "): SSID: " + ssid + ", Password: " + password + ", Hostname: " + hostname);
+  WiFi.setHostname(hostname.c_str());
+  if (wifiMode == 1) { // WEP
+    status = WiFi.begin(ssid.c_str(), keyIndex, password.c_str());
+  } else if (wifiMode == 2) { // WPA/WPA2
+    status = WiFi.begin(ssid.c_str(), password.c_str());
+  } else if (wifiMode == 3) { // open unencrypted network
+    status = WiFi.begin(ssid.c_str());
   }
-  Serial.println("new client");           // print a message out the serial port
-  int lineNum = 0;
-  String reqLine = "";
-  String currentLine = "";                // make a String to hold incoming data from the client
-  void *reqctx;
-  while (client.connected()) {            // loop while the client's connected
-    if (client.available()) {             // if there's bytes to read from the client,
-      char c = client.read();             // read a byte, then
-      // Serial.write(c);                    // print it out the serial monitor
-      if (c != '\n' && c != '\r') {    // if you got anything else but a carriage return character,
-        currentLine += c;      // add it to the end of the currentLine
-      } else if (c == '\n') {
-        if (currentLine.length() == 0) {
-          // request headers has ended so can be processed
-          onBodyStarted(client, reqctx);
-          break;
-        } else {
-          if (lineNum == 0) {
-            reqLine = currentLine;
-            int sp = reqLine.indexOf(" ");
-            int sp2 = reqLine.lastIndexOf(" ");
-            String method = reqLine.substring(0, sp);
-            String path = reqLine.substring(sp, sp2);
-            String version = reqLine.substring(sp2);
-            method.trim();
-            path.trim();
-            version.trim();
-            if (onRequest) reqctx = onRequest(method, path, version);
-          }
-          currentLine = "";
-        }
-        lineNum++;
-      }
+  Serial.println(String("Conection Status: ") + status + ", Success: " + (status == WL_CONNECTED));
+  return status == WL_CONNECTED;
+}
+
+void WIFI::next() {
+  if (state == WIFI_IDLE) {
+    // do nothing
+    currTry = 0;
+  } else if (state == WAP_STARTED) {
+    // what here?
+    handleAPClient();
+  } else if (state == STARTING_WAP) {
+    if (currTry > 0) {
+      delay(POST_CONN_WAIT);
+    }
+    currTry ++;
+    bool success = tryStartingWAP();
+    if (success || currTry >= numTries) {
+      state = success ? WAP_STARTED : WIFI_IDLE;
+      if (success) printWiFiStatus();
+    }
+    if (!success && currTry < numTries) {
+      Serial.println(String("WAP failed.  Starting again in: ") + POST_CONN_WAIT);
+    }
+  } else if (state == CONNECTING_TO_WIFI) {  // we are trying to connect to a wifi router
+    if (currTry > 0) {
+      delay(POST_CONN_WAIT);
+    }
+    currTry ++;
+    bool success = tryConnectingToWifi();
+    if (success || currTry >= numTries) {
+      state = success ? WIFI_CONNECTED : WIFI_IDLE;
+      printCurrentNet();
+    }
+    if (!success && currTry < numTries) {
+      Serial.println(String("WIFI connection failed.  Trying again in: ") + POST_CONN_WAIT);
     }
   }
-  // close the connection:
-  client.stop();
-  Serial.println("client disconnected");
 }
 
 void WIFI::printWAPStatus() {
@@ -281,4 +210,38 @@ void WIFI::printMacAddress(byte mac[]) {
     }
   }
   Serial.println();
+}
+
+bool WIFI::loadFromEEPROM() {
+  if (EEPROM.read(VERSION_ADDRESS) != DATA_VERSION) {
+    return false;
+  }
+
+  String _ssid = readStringFromEEPROM(SSID_ADDRESS);
+  if (_ssid == "") {
+    Serial.println("WIFI is not yet configured.");
+    return false;
+  }
+  ssid = _ssid;
+
+  password = readStringFromEEPROM(PASSWD_ADDRESS);
+  hostname = readStringFromEEPROM(HOSTNAME_ADDRESS);
+  EEPROM.get(KEYINDEX_ADDRESS, keyIndex);
+  Serial.println((String)"SSID: " +  ssid);
+  Serial.println((String)"Password: " +  password);
+  Serial.println((String)"Hostname: " +  hostname);
+  Serial.println((String)"KeyIndex: " +  keyIndex);
+  return true;
+}
+
+void WIFI::saveToEEPROM() {
+  Serial.println((String)"Saving SSID: " +  ssid);
+  Serial.println((String)"Saving Password: " +  password);
+  Serial.println((String)"Saving Hostname: " +  hostname);
+  Serial.println((String)"Saving KeyIndex: " +  keyIndex);
+  EEPROM.write(VERSION_ADDRESS, DATA_VERSION);
+  writeStringToEEPROM(SSID_ADDRESS, ssid);
+  writeStringToEEPROM(PASSWD_ADDRESS, password);
+  writeStringToEEPROM(HOSTNAME_ADDRESS, hostname);
+  EEPROM.write(KEYINDEX_ADDRESS, keyIndex);
 }

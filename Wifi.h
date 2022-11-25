@@ -5,24 +5,12 @@
 #include <WiFiNINA.h>
 #include "Arduino.h"
 
-class WebServer {
-public:
-  WebServer(int port = 80);
-  void start() {
-    server.begin();
-  }
-  void stop() {
-    // server.stop();
-  }
-  void handleClient();
-
-public:
-  void *(*onRequest)(String method, String path, String version);
-  void (*onHeader)(void *reqctx, String method, String path, String version);
-  void (*onBodyStarted)(WiFiClient &client, void *reqctx);
-
-private:
-  WiFiServer server;
+enum WIFIState {
+  WIFI_IDLE,
+  STARTING_WAP,
+  WAP_STARTED,
+  CONNECTING_TO_WIFI,
+  WIFI_CONNECTED,
 };
 
 /**
@@ -35,23 +23,44 @@ class WIFI {
 public:
   WIFI(char *ssid = NULL, char *password = "password", char *hostname = NULL, int keyIndex = 0);
   void configure(String ssid, String password, String hostname, int keyIndex = 0);
+  void setup();
+  void next();
   void printWAPStatus();
   void printWiFiStatus();
   void printCurrentNet();
   void printMacAddress(byte mac[]);
-  void start(int mode = 0);
+  bool start(int mode = 0, int numRetries = 5);
   void stop();
   bool handleAPClient();
   bool loadFromEEPROM();
   void saveToEEPROM();
+  bool inWAPMode() { return state == WAP_STARTED; }
 
+public:
   String ssid;
   String password;
   String hostname;
   int keyIndex = 0;  // your network key Index number (needed only for WEP)
 
+protected:
+  bool tryStartingWAP();
+  bool tryConnectingToWifi();
+
 private:
-  int status;        // connection status
+  // Connection status
+  int status;
+
+  // What state are we in?
+  int state;
+
+  // Which try are we on in the number of retries?
+  int currTry;
+
+  // How many times should a AP/WIFI connection be done
+  int numTries;
+
+  // Which mode to connect in
+  int wifiMode;
 };
 
 #endif
