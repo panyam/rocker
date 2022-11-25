@@ -46,5 +46,5 @@ void WebServer::next() {
   }
   // close the connection:
   client.stop();
-  Serial.println("client disconnected");
+  Serial.println("web client disconnected");
 }

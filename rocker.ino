@@ -162,7 +162,6 @@ String frontPageHtml = " \
 
 void onBodyStarted(WiFiClient &client, void *reqctx) {
   Request *req = (Request *)reqctx;
-  Serial.println("Request: ");
   Serial.println(req->method + String(": [") + req->path + String("]"));
 
   // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
