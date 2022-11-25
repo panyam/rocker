@@ -49,13 +49,6 @@ bool WIFI::start(int mode, int numRetries) {
   } else {
     state = CONNECTING_TO_WIFI;
   }
-
-  // print the network name (SSID);
-  if (mode != 0) {
-  }
-
-  // you're connected now, so print out the status
-  printWiFiStatus();
   return status == WL_CONNECTED;
 }
 
@@ -111,6 +104,8 @@ bool WIFI::tryConnectingToWifi() {
   } else if (wifiMode == 3) { // open unencrypted network
     status = WiFi.begin(ssid.c_str());
   }
+  // 10s delay seems to be needed to connect to a wifi
+  delay(2 * POST_CONN_WAIT);
   Serial.println(String("Conection Status: ") + status + ", Success: " + (status == WL_CONNECTED));
   return status == WL_CONNECTED;
 }
@@ -123,9 +118,6 @@ void WIFI::next() {
     // what here?
     handleAPClient();
   } else if (state == STARTING_WAP) {
-    if (currTry > 0) {
-      delay(POST_CONN_WAIT);
-    }
     currTry ++;
     bool success = tryStartingWAP();
     if (success || currTry >= numTries) {
@@ -136,9 +128,6 @@ void WIFI::next() {
       Serial.println(String("WAP failed.  Starting again in: ") + POST_CONN_WAIT);
     }
   } else if (state == CONNECTING_TO_WIFI) {  // we are trying to connect to a wifi router
-    if (currTry > 0) {
-      delay(POST_CONN_WAIT);
-    }
     currTry ++;
     bool success = tryConnectingToWifi();
     if (success || currTry >= numTries) {
