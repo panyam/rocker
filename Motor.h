@@ -5,7 +5,7 @@
 
 class Motor {
 public:
-  Motor(int rpwmPin, int lpwmPin, int ns = 5, int ls = 120, int hs = 250);
+  Motor(int rpwmPin, int lpwmPin, int ns = 5, int ls = 180, int hs = 320);
   void setup();
   void setSpeed(int speed);
   void decreaseSpeed();

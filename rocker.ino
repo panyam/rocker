@@ -5,6 +5,38 @@
 #include "Wifi.h"
 #include "Web.h"
 
+#include <Servo.h>
+Servo myservo; 
+
+void setup()
+{
+#ifdef DEBUG 
+    Serial.begin(9600);
+    // wait for serial port to connect. Needed for native USB port only
+    while (!Serial) ;
+#endif
+  DPRINTLN("Here.....");
+  myservo.attach(9);  // attaches the servo on pin 9 to the servo object
+}
+
+bool done = false;
+void loop() {
+  //if (done) return;
+  for (int pos = 0; pos <= 180; pos += 10) { // goes from 0 degrees to 180 degrees
+    // in steps of 1 degree
+    myservo.write(pos);              // tell servo to go to position in variable 'pos'
+    Serial.println(pos);
+    delay(20);                       // waits 15ms for the servo to reach the position
+  }
+  for (int pos = 180; pos >= 0; pos -= 10) { // goes from 180 degrees to 0 degrees
+    myservo.write(pos);              // tell servo to go to position in variable 'pos'
+    Serial.println(pos);
+    delay(20);                       // waits 15ms for the servo to reach the position
+  }
+  done = true;
+}
+
+#if 0
 typedef struct Request {
   String method;
   String path;
@@ -98,6 +130,7 @@ void setup()
     while (!Serial) ;
 #endif
   DPRINTLN("Here.....");
+  myservo.attach(9);  // attaches the servo on pin 9 to the servo object
   motor.setup();
   for (int i = 0;i < NUM_BUTTONS;i++) {
     buttons[i].setup();
@@ -283,3 +316,4 @@ void loop() {
     }
   }
 }
+#endif
